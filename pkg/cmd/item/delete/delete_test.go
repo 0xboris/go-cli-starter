@@ -33,6 +33,7 @@ func TestNewCmdDelete(t *testing.T) {
 			ios, _, _, _ := iostreams.Test()
 			ios.SetStdinTTY(tt.tty)
 			ios.SetStdoutTTY(tt.tty)
+			ios.SetStderrTTY(tt.tty)
 			f := &cmdutil.Factory{IOStreams: ios}
 
 			var got *DeleteOptions
@@ -55,6 +56,41 @@ func TestNewCmdDelete(t *testing.T) {
 			}
 			if got.ID != tt.wantID || got.Confirmed != tt.wantYes {
 				t.Errorf("got id=%d yes=%v", got.ID, got.Confirmed)
+			}
+		})
+	}
+}
+
+// Prompts are drawn on stderr, so prompting depends on stdin and stderr, not stdout.
+func TestNewCmdDelete_promptChannel(t *testing.T) {
+	tests := []struct {
+		name                  string
+		stdin, stdout, stderr bool
+		neverPrompt           bool
+		wantErr               bool
+	}{
+		{name: "stdout redirected still prompts", stdin: true, stdout: false, stderr: true},
+		{name: "stderr redirected cannot prompt", stdin: true, stdout: true, stderr: false, wantErr: true},
+		{name: "stdin piped cannot prompt", stdin: false, stdout: true, stderr: true, wantErr: true},
+		{name: "--no-input on a full TTY", stdin: true, stdout: true, stderr: true, neverPrompt: true, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ios, _, _, _ := iostreams.Test()
+			ios.SetStdinTTY(tt.stdin)
+			ios.SetStdoutTTY(tt.stdout)
+			ios.SetStderrTTY(tt.stderr)
+			ios.SetNeverPrompt(tt.neverPrompt)
+			cmd := NewCmdDelete(&cmdutil.Factory{IOStreams: ios}, func(*DeleteOptions) error { return nil })
+			cmd.SetArgs([]string{"3"})
+			cmd.SetOut(io.Discard)
+			cmd.SetErr(io.Discard)
+			_, err := cmd.ExecuteC()
+			if tt.wantErr != (err != nil) {
+				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
+			}
+			if err != nil && err.Error() != "--yes required when not running interactively" {
+				t.Errorf("unexpected message: %v", err)
 			}
 		})
 	}

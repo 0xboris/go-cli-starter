@@ -1,7 +1,9 @@
 package app
 
 import (
+	"os"
 	"strings"
+	"syscall"
 	"testing"
 
 	"example.com/tool/pkg/iostreams"
@@ -52,5 +54,56 @@ func TestRun(t *testing.T) {
 				t.Errorf("stderr %q does not contain %q", stderr.String(), tt.wantStderr)
 			}
 		})
+	}
+}
+
+func TestRun_promptsOnStderr(t *testing.T) {
+	t.Setenv("TOOL_CONFIG_DIR", t.TempDir())
+	ios, stdin, stdout, stderr := iostreams.Test()
+	ios.SetStdinTTY(true)
+	ios.SetStderrTTY(true) // stdout stays redirected
+	stdin.WriteString("nope\n")
+
+	code := Run([]string{"item", "delete", "3"}, ios)
+	if code != ExitError {
+		t.Errorf("exit = %d, want %d (mismatched confirmation)", code, ExitError)
+	}
+	if !strings.Contains(stderr.String(), "Type 3 to confirm deletion") {
+		t.Errorf("prompt not on stderr: %q", stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout must stay clean, got %q", stdout.String())
+	}
+}
+
+func TestRun_noInputFlag(t *testing.T) {
+	t.Setenv("TOOL_CONFIG_DIR", t.TempDir())
+	ios, _, _, stderr := iostreams.Test()
+	ios.SetStdinTTY(true)
+	ios.SetStdoutTTY(true)
+	ios.SetStderrTTY(true)
+
+	code := Run([]string{"item", "delete", "3", "--no-input"}, ios)
+	if code != ExitError || !strings.Contains(stderr.String(), "--yes required") {
+		t.Errorf("exit = %d, stderr = %q; want --yes required", code, stderr.String())
+	}
+}
+
+func TestRun_eofAtPromptIsCancel(t *testing.T) {
+	t.Setenv("TOOL_CONFIG_DIR", t.TempDir())
+	ios, _, _, _ := iostreams.Test()
+	ios.SetStdinTTY(true)
+	ios.SetStderrTTY(true)
+
+	if code := Run([]string{"item", "delete", "3"}, ios); code != ExitCancel {
+		t.Errorf("exit = %d, want %d: EOF at a prompt is never consent", code, ExitCancel)
+	}
+}
+
+func TestSignalExitCode(t *testing.T) {
+	for sig, want := range map[os.Signal]ExitCode{os.Interrupt: 130, syscall.SIGTERM: 143} {
+		if got := signalExitCode(sig); got != want {
+			t.Errorf("signalExitCode(%v) = %d, want %d", sig, got, want)
+		}
 	}
 }

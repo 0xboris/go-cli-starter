@@ -35,6 +35,18 @@ $ tool item delete 3 --yes`),
 		return cmdutil.FlagErrorWrap(err)
 	})
 	cmd.PersistentFlags().Bool("help", false, "Show help for command")
+	var noInput, noColor bool
+	cmd.PersistentFlags().BoolVar(&noInput, "no-input", false, "Never prompt; fail with the flags to use instead")
+	cmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "Disable color output")
+	// Subcommands must not define their own PersistentPreRun(E), or this one is skipped.
+	cmd.PersistentPreRun = func(c *cobra.Command, args []string) {
+		if noInput {
+			f.IOStreams.SetNeverPrompt(true)
+		}
+		if noColor {
+			f.IOStreams.SetColorEnabled(false)
+		}
+	}
 	cmd.Flags().BoolP("version", "v", false, "Show tool version")
 	cmd.SetHelpFunc(helpFunc)
 	cmd.SetUsageFunc(usageFunc)

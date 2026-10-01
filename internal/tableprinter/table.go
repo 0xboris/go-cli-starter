@@ -1,5 +1,7 @@
 // Package tableprinter renders aligned, colored tables on a TTY and plain
 // tab-separated values (no header, no truncation, no color) when piped.
+// Piped fields escape \\, tab, CR and LF so each record stays on one line.
+// Widths are measured in terminal cells (CJK and emoji take two).
 // For production, consider github.com/cli/go-gh/v2/pkg/tableprinter.
 package tableprinter
 
@@ -7,7 +9,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"unicode/utf8"
+
+	"github.com/mattn/go-runewidth"
 
 	"example.com/tool/internal/text"
 	"example.com/tool/pkg/iostreams"
@@ -58,7 +61,7 @@ func (t *TablePrinter) Render() error {
 		for _, r := range t.rows {
 			cells := make([]string, len(r))
 			for i, f := range r {
-				cells[i] = f.text
+				cells[i] = escapeField(f.text)
 			}
 			if _, err := fmt.Fprintln(out, strings.Join(cells, "\t")); err != nil {
 				return err
@@ -79,7 +82,7 @@ func (t *TablePrinter) Render() error {
 	widths := map[int]int{}
 	for _, r := range all {
 		for i, f := range r {
-			if n := utf8.RuneCountInString(f.text); n > widths[i] {
+			if n := runewidth.StringWidth(f.text); n > widths[i] {
 				widths[i] = n
 			}
 		}
@@ -92,13 +95,13 @@ func (t *TablePrinter) Render() error {
 			s := f.text
 			last := i == len(r)-1
 			if last { // truncate only the last column to the terminal width
-				if room := maxWidth - used; room > 3 && utf8.RuneCountInString(s) > room {
-					s = string([]rune(s)[:room-3]) + "..."
+				if room := maxWidth - used; room > 3 && runewidth.StringWidth(s) > room {
+					s = runewidth.Truncate(s, room, "...")
 				}
 			}
 			pad := ""
 			if !last {
-				pad = strings.Repeat(" ", widths[i]-utf8.RuneCountInString(s)+2)
+				pad = strings.Repeat(" ", widths[i]-runewidth.StringWidth(s)+2)
 			}
 			if f.color != nil {
 				s = f.color(s)
@@ -112,3 +115,8 @@ func (t *TablePrinter) Render() error {
 	}
 	return nil
 }
+
+var fieldEscaper = strings.NewReplacer("\\", "\\\\", "\t", "\\t", "\r", "\\r", "\n", "\\n")
+
+// escapeField makes a value safe for one tab-separated record.
+func escapeField(s string) string { return fieldEscaper.Replace(s) }

@@ -34,6 +34,19 @@ const (
 	ExitAuth   ExitCode = 4
 )
 
+// signalError is the cancellation cause when a signal interrupts the run.
+type signalError struct{ sig os.Signal }
+
+func (e signalError) Error() string { return "interrupted by " + e.sig.String() }
+
+// signalExitCode follows the shell convention 128+signal number.
+func signalExitCode(sig os.Signal) ExitCode {
+	if s, ok := sig.(syscall.Signal); ok {
+		return ExitCode(128 + int(s))
+	}
+	return ExitError
+}
+
 // AuthError means the command requires authentication (exit 4).
 type AuthError struct{ err error }
 
@@ -47,11 +60,24 @@ func Main() ExitCode {
 func Run(args []string, ios *iostreams.IOStreams) ExitCode {
 	stderr := ios.ErrOut
 
-	f := newFactory(ios)
-	applyEnvAndConfig(f) // env > config > default
+	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+	go func() {
+		select {
+		case sig := <-sigCh:
+			// Release the handler: a second Ctrl-C uses Go's default and terminates
+			// immediately, even if a command ignores its context.
+			signal.Stop(sigCh)
+			cancel(signalError{sig})
+		case <-ctx.Done():
+		}
+	}()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	f := newFactory(ctx, ios)
+	applyEnvAndConfig(f) // env > config > default
 
 	rootCmd := root.NewCmdRoot(f, build.Version, build.Date)
 	rootCmd.SetArgs(args)
@@ -60,13 +86,18 @@ func Run(args []string, ios *iostreams.IOStreams) ExitCode {
 	rootCmd.SetErr(ios.ErrOut)
 
 	cmd, err := rootCmd.ExecuteContextC(ctx)
+
+	// Interrupted by a signal: quiet exit with 128+signal (130 for Ctrl-C, 143 for
+	// SIGTERM). A Ctrl-C *at a prompt* is a CancelError instead and exits 2.
+	var sigErr signalError
+	if err != nil && errors.As(context.Cause(ctx), &sigErr) && !cmdutil.IsUserCancellation(err) {
+		fmt.Fprintln(stderr) // keep the shell prompt on its own line after ^C
+		return signalExitCode(sigErr.sig)
+	}
+
 	code := exitCodeFor(err, cmd, ios, debugEnabled())
 	if code == ExitOK && root.HasFailed() {
 		code = ExitError
-	}
-	if ctx.Err() != nil && code == ExitError {
-		fmt.Fprintln(stderr) // keep the shell prompt on its own line after ^C
-		code = ExitCancel
 	}
 	return code
 }
@@ -123,13 +154,13 @@ func printError(out io.Writer, err error, cmd *cobra.Command, debug bool) {
 	}
 }
 
-func newFactory(ios *iostreams.IOStreams) *cmdutil.Factory {
+func newFactory(ctx context.Context, ios *iostreams.IOStreams) *cmdutil.Factory {
 	exe, _ := os.Executable()
 	f := &cmdutil.Factory{
 		AppVersion:     build.Version,
 		ExecutablePath: exe,
 		IOStreams:      ios,
-		Prompter:       prompter.New(ios.In, ios.Out),
+		Prompter:       prompter.New(ctx, ios.In, ios.ErrOut), // prompts go to stderr
 	}
 
 	var cachedCfg *config.Config
