@@ -4,9 +4,11 @@ A small, compiling, tested starter for Go command-line tools, modeled on the Git
 It implements the contract of the `quality-cli` skill:
 thin `main`, `Main()` returning exit codes, typed errors, lazy Factory, IOStreams with
 TTY/pipe contracts, Options + `NewCmdX(f, runF)` + `xRun`, `--json/--jq/--template`,
-`CanPrompt` + `--yes`, help topics, nested typo suggestions, generated docs,
+`CanPrompt` (stdin + stderr) + `--yes` + global `--no-input`/`--no-color`, prompts on
+stderr, exit codes 0/1/2/4 plus 128+signal (130 Ctrl-C), escaped piped fields,
+cell-width tables, help topics, nested typo suggestions, generated docs,
 unit + testscript acceptance tests. Requires Go ≥ 1.22.
-Dependencies: cobra, pflag, x/term, gojq, yaml.v3, go-internal (tests).
+Dependencies: cobra, pflag, x/term, go-runewidth, gojq, yaml.v3, go-internal (tests).
 
 ## Use it
 
@@ -56,6 +58,8 @@ go run ./cmd/tool item list | cat           # piped: TSV, no header, RFC3339
 go run ./cmd/tool item list --json          # lists available fields
 go run ./cmd/tool item list --json id,title --jq '.[].title'
 go run ./cmd/tool item delete 3 </dev/null  # refuses: --yes required when not interactive
+go run ./cmd/tool item delete 3 --no-input  # same, even on a terminal (CI, agents)
+go run ./cmd/tool item delete 3 > out.txt   # still prompts (on stderr); out.txt only gets data
 go run ./cmd/tool item lsit                 # Did you mean this? list
 go run ./cmd/tool help environment
 ```

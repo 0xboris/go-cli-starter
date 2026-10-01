@@ -5,6 +5,7 @@ package prompter
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -24,24 +25,41 @@ type Prompter interface {
 
 // New returns a simple line-based prompter. It is accessible by construction
 // (no screen redraws) and is a good default; swap in a richer one if needed.
-func New(in io.Reader, out io.Writer) Prompter {
-	return &linePrompter{in: bufio.NewReader(in), out: out}
+// Prompts are written to out (stderr) and abort with ErrInterrupt when ctx is
+// cancelled, so Ctrl-C at a prompt exits immediately.
+func New(ctx context.Context, in io.Reader, out io.Writer) Prompter {
+	return &linePrompter{ctx: ctx, in: bufio.NewReader(in), out: out}
 }
 
 type linePrompter struct {
+	ctx context.Context
 	in  *bufio.Reader
 	out io.Writer
 }
 
 func (p *linePrompter) readLine() (string, error) {
-	line, err := p.in.ReadString('\n')
-	if err != nil && !(errors.Is(err, io.EOF) && line != "") {
-		if errors.Is(err, io.EOF) {
-			return "", ErrInterrupt // Ctrl-D
-		}
-		return "", err
+	type result struct {
+		line string
+		err  error
 	}
-	return strings.TrimSpace(line), nil
+	ch := make(chan result, 1)
+	go func() { // a blocked stdin read can't be interrupted; abandon it on cancel
+		line, err := p.in.ReadString('\n')
+		ch <- result{line, err}
+	}()
+	var r result
+	select {
+	case r = <-ch:
+	case <-p.ctx.Done():
+		return "", ErrInterrupt // Ctrl-C
+	}
+	if r.err != nil && !(errors.Is(r.err, io.EOF) && r.line != "") {
+		if errors.Is(r.err, io.EOF) {
+			return "", ErrInterrupt // Ctrl-D: EOF is never consent
+		}
+		return "", r.err
+	}
+	return strings.TrimSpace(r.line), nil
 }
 
 func (p *linePrompter) Input(prompt, defaultValue string) (string, error) {

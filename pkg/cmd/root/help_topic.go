@@ -25,7 +25,8 @@ $XDG_CONFIG_HOME/tool or ~/.config/tool is used.
 TOOL_PAGER, PAGER (in order of precedence): a terminal paging program to send
 standard output to, e.g. "less". Set to "cat" to disable.
 
-TOOL_PROMPT_DISABLED: set to any value to disable interactive prompting in the terminal.
+TOOL_PROMPT_DISABLED: set to any value to disable interactive prompting in the terminal
+(same as the --no-input flag). Commands that need input then fail with the flags to use.
 
 TOOL_FORCE_TTY: set to any value to force terminal-style output even when the output
 is redirected. A numeric value sets the output width in columns.
@@ -35,6 +36,8 @@ TOOL_DEBUG: set to a truthy value to enable verbose output on standard error.
 NO_COLOR: set to any value to avoid printing ANSI escape sequences for color output.
 
 CLICOLOR: set to "0" to disable printing ANSI colors in output.
+
+TERM: when set to "dumb", colors and spinners are disabled.
 
 CLICOLOR_FORCE: set to a value other than "0" to keep ANSI colors in output even when
 the output is piped.`),
@@ -52,6 +55,10 @@ tool follows normal conventions regarding exit codes.
 - If a command is running but gets cancelled, the exit code will be 2
 
 - If a command requires authentication, the exit code will be 4
+
+- If a command is interrupted by a signal, the exit code will be 128 plus the signal
+  number: 130 for Ctrl-C (SIGINT), 143 for SIGTERM. Ctrl-C at a prompt counts as a
+  cancellation (exit code 2)
 
 NOTE: It is possible that a particular command may have more exit codes, so it is a
 good practice to check documentation for the command if you are relying on exit codes

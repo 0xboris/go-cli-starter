@@ -64,11 +64,11 @@ func System() *IOStreams {
 		}
 	}
 	forced := os.Getenv("CLICOLOR_FORCE") != "" && os.Getenv("CLICOLOR_FORCE") != "0"
-	disabled := os.Getenv("NO_COLOR") != "" || os.Getenv("CLICOLOR") == "0"
+	disabled := os.Getenv("NO_COLOR") != "" || os.Getenv("CLICOLOR") == "0" || os.Getenv("TERM") == "dumb"
 	s.colorEnabled = forced || (!disabled && s.IsStdoutTTY())
 
 	// Spinners only when both streams are terminals: never pollute logs or pipes.
-	s.spinnerDisabled = !(s.IsStdoutTTY() && s.IsStderrTTY())
+	s.spinnerDisabled = !(s.IsStdoutTTY() && s.IsStderrTTY()) || os.Getenv("TERM") == "dumb"
 	return s
 }
 
@@ -120,13 +120,15 @@ func (s *IOStreams) SetNeverPrompt(v bool)     { s.neverPrompt = v }
 func (s *IOStreams) SetSpinnerDisabled(v bool) { s.spinnerDisabled = v }
 func (s *IOStreams) SetPager(cmd string)       { s.pagerCommand = cmd }
 
-// CanPrompt is true only when both stdin and stdout are terminals and prompting
-// has not been disabled (TOOL_PROMPT_DISABLED / config).
+// CanPrompt is true only when stdin and stderr (the channel prompts are drawn on)
+// are terminals and prompting has not been disabled (--no-input,
+// TOOL_PROMPT_DISABLED, config). stdout may be redirected: `tool x > out.txt` can
+// still ask, and the file only receives data.
 func (s *IOStreams) CanPrompt() bool {
 	if s.neverPrompt {
 		return false
 	}
-	return s.IsStdinTTY() && s.IsStdoutTTY()
+	return s.IsStdinTTY() && s.IsStderrTTY()
 }
 
 // TerminalWidth returns the terminal width, or DefaultWidth when unknown.
