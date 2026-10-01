@@ -1,0 +1,35 @@
+version: 2
+project_name: tool
+before:
+  hooks:
+    - go mod tidy
+    - make docs completions
+builds:
+  - main: ./cmd/tool
+    binary: tool
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X example.com/tool/internal/build.Version={{.Version}} -X example.com/tool/internal/build.Date={{time "2006-01-02"}}
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    files: [LICENSE, README.md, share/man/man1/*, share/completions/*]
+checksum:
+  name_template: checksums.txt
+nfpms:
+  - package_name: tool
+    formats: [deb, rpm]
+    contents:
+      - src: share/man/man1/*
+        dst: /usr/share/man/man1/
+      - src: share/completions/tool.bash
+        dst: /usr/share/bash-completion/completions/tool
+      - src: share/completions/_tool
+        dst: /usr/share/zsh/vendor-completions/_tool
+release:
+  draft: true # publish after verifying all artifacts

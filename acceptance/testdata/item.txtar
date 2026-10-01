@@ -1,0 +1,24 @@
+# Piped list: tab-separated, no header, explicit state.
+exec tool item list --state all
+stdout '^3\tWrite docs\topen\t'
+! stdout 'TITLE'
+
+# JSON with jq.
+exec tool item list --json id,title --jq '.[].title'
+stdout '^Write docs$'
+
+# Usage errors exit 1, go to stderr, and show usage.
+! exec tool item list --limit 0
+stderr 'invalid value for --limit: 0'
+stderr 'Usage:  tool item list'
+! stdout .
+
+# Destructive commands refuse to run unattended without --yes.
+! exec tool item delete 3
+stderr '--yes required when not running interactively'
+exec tool item delete 3 --yes
+! stdout .
+
+# Help works without config or network.
+exec tool --help
+stdout 'CORE COMMANDS'

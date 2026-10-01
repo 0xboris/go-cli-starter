@@ -1,0 +1,40 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    # gh's curated set
+    - asciicheck
+    - bidichk
+    - bodyclose
+    - copyloopvar
+    - durationcheck
+    - gocritic
+    - govet
+    - ineffassign
+    - nilerr
+    - nolintlint
+    - unused
+    # additions
+    - errcheck
+    - staticcheck
+    - forbidigo
+  settings:
+    forbidigo:
+      # Enforce the I/O contract: commands write through IOStreams and return errors.
+      forbid:
+        - pattern: ^os\.Exit$
+          msg: return an error; only main/app decides exit codes
+        - pattern: ^fmt\.Print(f|ln)?$
+          msg: write to IOStreams.Out or IOStreams.ErrOut
+        - pattern: ^os\.(Stdout|Stderr|Stdin)$
+          msg: use IOStreams
+      analyze-types: true
+  exclusions:
+    rules:
+      - path: (cmd/|internal/app/|pkg/iostreams/)
+        linters: [forbidigo]
+      - path: _test\.go
+        linters: [forbidigo, errcheck]
+formatters:
+  enable:
+    - gofmt
