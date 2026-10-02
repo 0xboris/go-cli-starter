@@ -19,7 +19,7 @@ func TestNewCmdDelete(t *testing.T) {
 		tty     bool
 		cli     string
 		wantErr string
-		wantID  int
+		wantID  api.ItemID
 		wantYes bool
 	}{
 		{name: "tty without --yes prompts later", tty: true, cli: "3", wantID: 3},

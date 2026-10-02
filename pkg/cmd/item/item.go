@@ -6,6 +6,7 @@ import (
 
 	deleteCmd "example.com/tool/pkg/cmd/item/delete"
 	listCmd "example.com/tool/pkg/cmd/item/list"
+	viewCmd "example.com/tool/pkg/cmd/item/view"
 	"example.com/tool/pkg/cmdutil"
 )
 
@@ -20,6 +21,7 @@ func NewCmdItem(f *cmdutil.Factory) *cobra.Command {
 		},
 	}
 	cmd.AddCommand(listCmd.NewCmdList(f, nil))
+	cmd.AddCommand(viewCmd.NewCmdView(f, nil))
 	cmd.AddCommand(deleteCmd.NewCmdDelete(f, nil))
 	return cmd
 }

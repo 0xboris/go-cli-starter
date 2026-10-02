@@ -19,6 +19,7 @@ const (
 	EnvPager          = "TOOL_PAGER"
 	EnvPromptDisabled = "TOOL_PROMPT_DISABLED"
 	EnvDebug          = "TOOL_DEBUG"
+	EnvBrowser        = "TOOL_BROWSER"
 )
 
 // Option declares a config key. The table drives validation, `config list`
@@ -140,13 +141,13 @@ func WriteFileAtomic(path string, data []byte, perm fs.FileMode) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(tmp.Name()) // no-op after a successful rename
+	defer func() { _ = os.Remove(tmp.Name()) }() // no-op after a successful rename
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return err
 	}
 	if err := tmp.Chmod(perm); err != nil {
-		tmp.Close()
+		_ = tmp.Close()
 		return err
 	}
 	if err := tmp.Close(); err != nil {

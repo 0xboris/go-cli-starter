@@ -69,7 +69,7 @@ $ tool item delete 3 --yes`),
 func helpFunc(cmd *cobra.Command, args []string) {
 	out := cmd.OutOrStdout()
 	if cmd.Annotations["helpTopic"] == "true" {
-		fmt.Fprintln(out, cmd.Long)
+		_, _ = fmt.Fprintln(out, cmd.Long) // help funcs cannot return errors
 		return
 	}
 	// Help funcs receive the full argv. Anything left after the command path that
@@ -90,11 +90,11 @@ func helpFunc(cmd *cobra.Command, args []string) {
 			if cmd.SuggestionsMinimumDistance <= 0 {
 				cmd.SuggestionsMinimumDistance = 2 // cobra only suggests at the root by default
 			}
-			fmt.Fprintf(cmd.ErrOrStderr(), "unknown command %q for %q\n", unknown, cmd.CommandPath())
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "unknown command %q for %q\n", unknown, cmd.CommandPath())
 			if s := cmd.SuggestionsFor(unknown); len(s) > 0 {
-				fmt.Fprintf(cmd.ErrOrStderr(), "\nDid you mean this?\n\t%s\n", strings.Join(s, "\n\t"))
+				_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "\nDid you mean this?\n\t%s\n", strings.Join(s, "\n\t"))
 			}
-			fmt.Fprintf(cmd.ErrOrStderr(), "\nRun '%s --help' for usage.\n", cmd.CommandPath())
+			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "\nRun '%s --help' for usage.\n", cmd.CommandPath())
 			failed = true
 			return
 		}
@@ -104,18 +104,18 @@ func helpFunc(cmd *cobra.Command, args []string) {
 		if strings.TrimSpace(body) == "" {
 			return
 		}
-		fmt.Fprintf(out, "%s\n", strings.ToUpper(title))
+		_, _ = fmt.Fprintf(out, "%s\n", strings.ToUpper(title))
 		for _, line := range strings.Split(strings.TrimRight(body, "\n"), "\n") {
-			fmt.Fprintf(out, "  %s\n", line)
+			_, _ = fmt.Fprintf(out, "  %s\n", line)
 		}
-		fmt.Fprintln(out)
+		_, _ = fmt.Fprintln(out)
 	}
 
 	desc := cmd.Long
 	if desc == "" {
 		desc = cmd.Short
 	}
-	fmt.Fprintf(out, "%s\n\n", desc)
+	_, _ = fmt.Fprintf(out, "%s\n\n", desc)
 	section("Usage", cmd.UseLine())
 	if len(cmd.Aliases) > 0 {
 		section("Aliases", strings.Join(cmd.Aliases, ", "))
@@ -173,18 +173,18 @@ func HasFailed() bool { return failed }
 // line, the flags, and where to get full help.
 func usageFunc(cmd *cobra.Command) error {
 	out := cmd.ErrOrStderr()
-	fmt.Fprintf(out, "Usage:  %s\n", cmd.UseLine())
+	_, _ = fmt.Fprintf(out, "Usage:  %s\n", cmd.UseLine())
 	if cmd.HasAvailableSubCommands() {
-		fmt.Fprintln(out, "\nAvailable commands:")
+		_, _ = fmt.Fprintln(out, "\nAvailable commands:")
 		for _, c := range cmd.Commands() {
 			if c.IsAvailableCommand() && c.Annotations["helpTopic"] != "true" {
-				fmt.Fprintf(out, "  %s\n", c.Name())
+				_, _ = fmt.Fprintf(out, "  %s\n", c.Name())
 			}
 		}
 	}
 	if flags := cmd.LocalFlags().FlagUsages(); flags != "" {
-		fmt.Fprintf(out, "\nFlags:\n%s", flags)
+		_, _ = fmt.Fprintf(out, "\nFlags:\n%s", flags)
 	}
-	fmt.Fprintf(out, "\nRun '%s --help' for more information.\n", cmd.CommandPath())
+	_, _ = fmt.Fprintf(out, "\nRun '%s --help' for more information.\n", cmd.CommandPath())
 	return nil
 }

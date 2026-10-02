@@ -68,7 +68,7 @@ func System() *IOStreams {
 	s.colorEnabled = forced || (!disabled && s.IsStdoutTTY())
 
 	// Spinners only when both streams are terminals: never pollute logs or pipes.
-	s.spinnerDisabled = !(s.IsStdoutTTY() && s.IsStderrTTY()) || os.Getenv("TERM") == "dumb"
+	s.spinnerDisabled = !s.IsStdoutTTY() || !s.IsStderrTTY() || os.Getenv("TERM") == "dumb"
 	return s
 }
 
@@ -174,11 +174,11 @@ func (s *IOStreams) StartProgressIndicatorWithLabel(label string) {
 		defer t.Stop()
 		for i := 0; ; i++ {
 			s.progressMu.Lock()
-			fmt.Fprintf(s.ErrOut, "\r\033[K%s %s", frames[i%len(frames)], s.progressLabel)
+			_, _ = fmt.Fprintf(s.ErrOut, "\r\033[K%s %s", frames[i%len(frames)], s.progressLabel)
 			s.progressMu.Unlock()
 			select {
 			case <-stop:
-				fmt.Fprint(s.ErrOut, "\r\033[K")
+				_, _ = fmt.Fprint(s.ErrOut, "\r\033[K")
 				return
 			case <-t.C:
 			}

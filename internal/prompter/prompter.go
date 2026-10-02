@@ -53,7 +53,7 @@ func (p *linePrompter) readLine() (string, error) {
 	case <-p.ctx.Done():
 		return "", ErrInterrupt // Ctrl-C
 	}
-	if r.err != nil && !(errors.Is(r.err, io.EOF) && r.line != "") {
+	if r.err != nil && (!errors.Is(r.err, io.EOF) || r.line == "") {
 		if errors.Is(r.err, io.EOF) {
 			return "", ErrInterrupt // Ctrl-D: EOF is never consent
 		}
@@ -64,9 +64,9 @@ func (p *linePrompter) readLine() (string, error) {
 
 func (p *linePrompter) Input(prompt, defaultValue string) (string, error) {
 	if defaultValue != "" {
-		fmt.Fprintf(p.out, "? %s (default: %s) ", prompt, defaultValue)
+		_, _ = fmt.Fprintf(p.out, "? %s (default: %s) ", prompt, defaultValue) // a dead stream surfaces on read
 	} else {
-		fmt.Fprintf(p.out, "? %s ", prompt)
+		_, _ = fmt.Fprintf(p.out, "? %s ", prompt)
 	}
 	v, err := p.readLine()
 	if err != nil {
@@ -83,7 +83,7 @@ func (p *linePrompter) Confirm(prompt string, defaultValue bool) (bool, error) {
 	if defaultValue {
 		hint = "Y/n" // default in caps
 	}
-	fmt.Fprintf(p.out, "? %s (%s) ", prompt, hint)
+	_, _ = fmt.Fprintf(p.out, "? %s (%s) ", prompt, hint)
 	v, err := p.readLine()
 	if err != nil {
 		return false, err
@@ -99,7 +99,7 @@ func (p *linePrompter) Confirm(prompt string, defaultValue bool) (bool, error) {
 }
 
 func (p *linePrompter) ConfirmDeletion(requiredValue string) error {
-	fmt.Fprintf(p.out, "? Type %s to confirm deletion: ", requiredValue)
+	_, _ = fmt.Fprintf(p.out, "? Type %s to confirm deletion: ", requiredValue)
 	v, err := p.readLine()
 	if err != nil {
 		return err

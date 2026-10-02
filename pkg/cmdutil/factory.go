@@ -2,6 +2,7 @@ package cmdutil
 
 import (
 	"example.com/tool/internal/api"
+	"example.com/tool/internal/browser"
 	"example.com/tool/internal/config"
 	"example.com/tool/internal/prompter"
 	"example.com/tool/pkg/iostreams"
@@ -17,6 +18,7 @@ type Factory struct {
 
 	IOStreams *iostreams.IOStreams
 	Prompter  prompter.Prompter
+	Browser   browser.Browser
 
 	Config    func() (*config.Config, error)
 	APIClient func() (api.Client, error)
