@@ -1,0 +1,90 @@
+# Cut a release from the Actions tab: "release" → "Run workflow" → enter a version.
+# It runs the same checks as `make lint test` on main, then creates and pushes an
+# annotated tag. Tags are made here, not on a laptop, so every release is checked
+# and tagged the same way.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to tag, e.g. v0.3.0 (semver with a leading v)"
+        required: true
+        type: string
+      message:
+        description: "One-line tag message, e.g. 'v0.3.0: domain layer, adapters' (defaults to the version)"
+        required: false
+        type: string
+
+permissions:
+  contents: write # push the tag
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Only release from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Run this workflow from main (selected: $GITHUB_REF)"
+          exit 1
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # all tags, for the version checks
+
+      - name: Validate version
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -eu
+          if ! printf '%s\n' "$VERSION" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::'$VERSION' is not a version like v1.2.3 or v1.2.3-rc.1"
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "::error::$VERSION already exists"
+            exit 1
+          fi
+          latest=$(git tag --list 'v*' --sort=-v:refname | head -n 1)
+          if [ -n "$latest" ] && [ "$(printf '%s\n%s\n' "$latest" "$VERSION" | sort -V | tail -n 1)" != "$VERSION" ]; then
+            echo "::error::$VERSION is not newer than the latest tag $latest"
+            exit 1
+          fi
+          echo "Releasing $VERSION at $(git rev-parse --short HEAD) (previous: ${latest:-none})"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check
+        run: |
+          go mod tidy -diff
+          go vet ./...
+          go test -race ./...
+
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          version: v2.14.0
+
+      - name: Tag
+        env:
+          VERSION: ${{ inputs.version }}
+          MESSAGE: ${{ inputs.message }}
+        run: |
+          set -eu
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" -m "${MESSAGE:-$VERSION}"
+          git push origin "refs/tags/$VERSION"
+          {
+            echo "### Tagged $VERSION"
+            echo
+            echo "Commit: \`$(git rev-parse HEAD)\`"
+            echo
+            echo "Install: \`go install example.com/tool/cmd/tool@$VERSION\`"
+          } >> "$GITHUB_STEP_SUMMARY"

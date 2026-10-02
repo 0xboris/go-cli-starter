@@ -93,6 +93,18 @@ go run ./cmd/tool item lsit                 # Did you mean this? list
 go run ./cmd/tool help environment
 ```
 
+## Releasing
+
+Releases are tagged by the `release` workflow, not from a laptop: **Actions → release →
+Run workflow** (from `main`), enter a version such as `v0.4.0` and, optionally, a
+one-line message. It refuses a malformed, existing or older version, runs
+`go mod tidy -diff`, `go vet`, `go test -race` and golangci-lint on `main`, then pushes
+an annotated tag. Users install with `go install example.com/tool/cmd/tool@<version>`.
+
+`.goreleaser.yml` is not wired into the workflow yet. Before adding a GoReleaser step,
+add a `LICENSE` file (the archives include it) and set `nfpms.maintainer`, then check
+with `goreleaser release --snapshot --clean`.
+
 ## Upgrades when you need them
 
 - Richer terminal support (Windows VT, 256/truecolor, themes, `GH_FORCE_TTY %`): `github.com/cli/go-gh/v2/pkg/term`,
