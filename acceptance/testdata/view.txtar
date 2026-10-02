@@ -1,0 +1,28 @@
+# Piped view: one key<TAB>value line per field, absolute time.
+exec tool item view 3
+stdout '^title\tWrite docs$'
+stdout '^url\thttps://example.com/items/3$'
+stdout '^updated\t\d{4}-\d\d-\d\dT'
+! stderr .
+
+# JSON for one item is an object.
+exec tool item view 3 --json id,url
+stdout '^\{"id":3,"url":"https://example.com/items/3"\}$'
+
+# Not found: exit 1, message and next step on stderr, nothing on stdout.
+! exec tool item view 99
+stderr '^item 99 not found$'
+stderr 'tool item list --state all'
+! stdout .
+
+# --web runs the external launcher through the browser adapter. The launcher's
+# own output is diagnostics, so it goes to stderr and stdout stays empty.
+[!windows] env 'TOOL_BROWSER=echo launched:'
+[!windows] exec tool item view 3 --web
+[!windows] stderr '^launched: https://example.com/items/3$'
+[!windows] ! stdout .
+
+# A missing launcher is a clear error, not a crash.
+env TOOL_BROWSER=no-such-browser-program
+! exec tool item view 3 --web
+stderr 'no-such-browser-program not found; set TOOL_BROWSER'

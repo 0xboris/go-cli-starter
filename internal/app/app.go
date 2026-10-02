@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"example.com/tool/internal/api"
+	"example.com/tool/internal/browser"
 	"example.com/tool/internal/build"
 	"example.com/tool/internal/config"
 	"example.com/tool/internal/prompter"
@@ -91,7 +93,7 @@ func Run(args []string, ios *iostreams.IOStreams) ExitCode {
 	// SIGTERM). A Ctrl-C *at a prompt* is a CancelError instead and exits 2.
 	var sigErr signalError
 	if err != nil && errors.As(context.Cause(ctx), &sigErr) && !cmdutil.IsUserCancellation(err) {
-		fmt.Fprintln(stderr) // keep the shell prompt on its own line after ^C
+		_, _ = fmt.Fprintln(stderr) // keep the shell prompt on its own line after ^C
 		return signalExitCode(sigErr.sig)
 	}
 
@@ -115,16 +117,16 @@ func exitCodeFor(err error, cmd *cobra.Command, ios *iostreams.IOStreams, debug 
 	case errors.Is(err, cmdutil.SilentError):
 		return ExitError
 	case cmdutil.IsUserCancellation(err):
-		fmt.Fprintln(stderr)
+		_, _ = fmt.Fprintln(stderr)
 		return ExitCancel
 	case errors.As(err, &authErr):
-		fmt.Fprintln(stderr, authErr.Error())
+		_, _ = fmt.Fprintln(stderr, authErr.Error())
 		return ExitAuth
 	case errors.As(err, &pagerErr):
 		return ExitOK // the user quit the pager
 	case errors.As(err, &noResults):
 		if ios.IsStdoutTTY() {
-			fmt.Fprintln(stderr, noResults.Error())
+			_, _ = fmt.Fprintln(stderr, noResults.Error())
 		}
 		return ExitOK // empty is not a failure
 	}
@@ -135,20 +137,20 @@ func exitCodeFor(err error, cmd *cobra.Command, ios *iostreams.IOStreams, debug 
 func printError(out io.Writer, err error, cmd *cobra.Command, debug bool) {
 	var dnsErr *net.DNSError
 	if errors.As(err, &dnsErr) {
-		fmt.Fprintf(out, "error connecting to %s\n", dnsErr.Name)
+		_, _ = fmt.Fprintf(out, "error connecting to %s\n", dnsErr.Name)
 		if debug {
-			fmt.Fprintln(out, dnsErr)
+			_, _ = fmt.Fprintln(out, dnsErr)
 		}
-		fmt.Fprintln(out, "check your internet connection")
+		_, _ = fmt.Fprintln(out, "check your internet connection")
 		return
 	}
 
-	fmt.Fprintln(out, err)
+	_, _ = fmt.Fprintln(out, err)
 
 	var flagErr *cmdutil.FlagError
 	if cmd != nil && (errors.As(err, &flagErr) || strings.HasPrefix(err.Error(), "unknown command ")) {
 		if !strings.HasSuffix(err.Error(), "\n") {
-			fmt.Fprintln(out)
+			_, _ = fmt.Fprintln(out)
 		}
 		_ = cmd.Usage() // terse usage to stderr (see root.usageFunc)
 	}
@@ -161,6 +163,8 @@ func newFactory(ctx context.Context, ios *iostreams.IOStreams) *cmdutil.Factory 
 		ExecutablePath: exe,
 		IOStreams:      ios,
 		Prompter:       prompter.New(ctx, ios.In, ios.ErrOut), // prompts go to stderr
+		// The launcher's own output is diagnostics, not data: both streams to stderr.
+		Browser: browser.New(browserCommand(), ios.ErrOut, ios.ErrOut),
 	}
 
 	var cachedCfg *config.Config
@@ -176,9 +180,9 @@ func newFactory(ctx context.Context, ios *iostreams.IOStreams) *cmdutil.Factory 
 	f.APIClient = func() (api.Client, error) {
 		now := time.Now()
 		return &api.MemoryClient{Items: []api.Item{
-			{ID: 3, Title: "Write docs", State: "open", UpdatedAt: now.Add(-2 * time.Hour)},
-			{ID: 2, Title: "Add --json output", State: "open", UpdatedAt: now.Add(-26 * time.Hour)},
-			{ID: 1, Title: "Initial release", State: "closed", UpdatedAt: now.Add(-40 * 24 * time.Hour)},
+			{ID: 3, Title: "Write docs", State: "open", URL: "https://example.com/items/3", UpdatedAt: now.Add(-2 * time.Hour)},
+			{ID: 2, Title: "Add --json output", State: "open", URL: "https://example.com/items/2", UpdatedAt: now.Add(-26 * time.Hour)},
+			{ID: 1, Title: "Initial release", State: "closed", URL: "https://example.com/items/1", UpdatedAt: now.Add(-40 * 24 * time.Hour)},
 		}}, nil
 	}
 	return f
@@ -190,7 +194,7 @@ func applyEnvAndConfig(f *cmdutil.Factory) {
 	ios := f.IOStreams
 	cfg, err := f.Config()
 	if err != nil {
-		fmt.Fprintf(ios.ErrOut, "warning: %v\n", err)
+		_, _ = fmt.Fprintf(ios.ErrOut, "warning: %v\n", err)
 		cfg = config.NewFromMap(map[string]string{})
 	}
 
@@ -206,6 +210,17 @@ func applyEnvAndConfig(f *cmdutil.Factory) {
 		pager = os.Getenv("PAGER")
 	}
 	ios.SetPager(pager)
+}
+
+// browserCommand resolves the URL opener: TOOL_BROWSER > BROWSER > OS default.
+// Env is read here, in the composition root, never inside the browser package.
+func browserCommand() []string {
+	for _, env := range []string{config.EnvBrowser, "BROWSER"} {
+		if fields := strings.Fields(os.Getenv(env)); len(fields) > 0 {
+			return fields
+		}
+	}
+	return browser.DefaultCommand(runtime.GOOS)
 }
 
 func debugEnabled() bool {

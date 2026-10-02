@@ -17,8 +17,8 @@ func NewCmdVersion(f *cmdutil.Factory, version, buildDate string) *cobra.Command
 		Hidden: true, // `tool --version` is the documented form; both work
 		Args:   cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprint(f.IOStreams.Out, Format(version, buildDate))
-			return nil
+			_, err := fmt.Fprint(f.IOStreams.Out, Format(version, buildDate))
+			return err
 		},
 	}
 	cmdutil.DisableAuthCheck(cmd)

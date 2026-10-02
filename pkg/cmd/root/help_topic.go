@@ -33,6 +33,10 @@ is redirected. A numeric value sets the output width in columns.
 
 TOOL_DEBUG: set to a truthy value to enable verbose output on standard error.
 
+TOOL_BROWSER, BROWSER (in order of precedence): the program, with optional arguments
+separated by spaces, used to open URLs (e.g. by "item view --web"). Defaults to
+"open" on macOS, "xdg-open" on Linux and "rundll32 url.dll,FileProtocolHandler" on Windows.
+
 NO_COLOR: set to any value to avoid printing ANSI escape sequences for color output.
 
 CLICOLOR: set to "0" to disable printing ANSI colors in output.

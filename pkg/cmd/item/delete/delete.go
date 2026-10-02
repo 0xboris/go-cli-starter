@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 
 	"github.com/spf13/cobra"
 
 	"example.com/tool/internal/api"
 	"example.com/tool/internal/prompter"
+	"example.com/tool/pkg/cmd/item/shared"
 	"example.com/tool/pkg/cmdutil"
 	"example.com/tool/pkg/iostreams"
 )
@@ -20,7 +20,7 @@ type DeleteOptions struct {
 	Prompter  prompter.Prompter
 	Ctx       context.Context
 
-	ID        int
+	ID        api.ItemID
 	Confirmed bool
 }
 
@@ -40,9 +40,9 @@ $ tool item delete 3 --yes`,
 		Args: cmdutil.ExactArgs(1, "cannot delete item: id argument required"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			opts.Ctx = cmd.Context()
-			id, err := strconv.Atoi(args[0])
-			if err != nil || id < 1 {
-				return cmdutil.FlagErrorf("invalid item id: %q", args[0])
+			id, err := shared.ParseIDArg(args[0])
+			if err != nil {
+				return err
 			}
 			opts.ID = id
 			if !opts.IO.CanPrompt() && !opts.Confirmed {
@@ -69,7 +69,7 @@ func deleteRun(opts *DeleteOptions) error {
 	}
 
 	if !opts.Confirmed {
-		if err := opts.Prompter.ConfirmDeletion(strconv.Itoa(opts.ID)); err != nil {
+		if err := opts.Prompter.ConfirmDeletion(opts.ID.String()); err != nil {
 			if errors.Is(err, prompter.ErrInterrupt) {
 				return cmdutil.CancelError
 			}
@@ -78,16 +78,12 @@ func deleteRun(opts *DeleteOptions) error {
 	}
 
 	if err := client.DeleteItem(ctx, opts.ID); err != nil {
-		var nf api.NotFoundError
-		if errors.As(err, &nf) {
-			return fmt.Errorf("%w\nrun `tool item list --state all` to see existing items", err)
-		}
-		return err
+		return shared.NotFoundHint(err)
 	}
 
 	if opts.IO.IsStdoutTTY() {
 		cs := opts.IO.ColorScheme()
-		fmt.Fprintf(opts.IO.ErrOut, "%s Deleted item %d\n", cs.SuccessIcon(), opts.ID)
+		_, _ = fmt.Fprintf(opts.IO.ErrOut, "%s Deleted item %d\n", cs.SuccessIcon(), opts.ID)
 	}
 	return nil
 }

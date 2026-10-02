@@ -18,7 +18,31 @@ linters:
     - errcheck
     - staticcheck
     - forbidigo
+    - depguard
   settings:
+    depguard:
+      # Layering (quality-cli references/layers.md): imports point down only. The
+      # domain (internal/api) and adapters (internal/browser, internal/config) know
+      # nothing about commands, flags or terminals. internal/archtest checks the same
+      # rules transitively with plain `go test`.
+      rules:
+        below-commands:
+          files:
+            - "**/internal/api/**"
+            - "**/internal/browser/**"
+            - "**/internal/config/**"
+            - "**/internal/build/**"
+            - "**/internal/text/**"
+            - "!$test"
+          deny:
+            - pkg: github.com/spf13/cobra
+              desc: domain and adapters must not know about commands
+            - pkg: github.com/spf13/pflag
+              desc: domain and adapters must not know about flags
+            - pkg: example.com/tool/pkg
+              desc: imports point down only; return data and let the command render it
+            - pkg: example.com/tool/internal/app
+              desc: only main imports the composition root
     forbidigo:
       # Enforce the I/O contract: commands write through IOStreams and return errors.
       forbid:
@@ -31,10 +55,15 @@ linters:
       analyze-types: true
   exclusions:
     rules:
-      - path: (cmd/|internal/app/|pkg/iostreams/)
+      # Anchored: an unanchored "cmd/" also matched pkg/cmd/ and exempted every command.
+      - path: ^(cmd/|internal/app/|pkg/iostreams/)
         linters: [forbidigo]
       - path: _test\.go
         linters: [forbidigo, errcheck]
+      # SilentError/CancelError keep gh's cmdutil names on purpose.
+      - path: ^pkg/cmdutil/errors\.go$
+        text: ST1012
+        linters: [staticcheck]
 formatters:
   enable:
     - gofmt

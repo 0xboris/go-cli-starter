@@ -192,14 +192,18 @@ func evalJQ(in io.Reader, out io.Writer, expr string) error {
 			return err
 		}
 		if s, ok := v.(string); ok { // raw strings, like `jq -r`
-			fmt.Fprintln(out, s)
+			if _, err := fmt.Fprintln(out, s); err != nil {
+				return err
+			}
 			continue
 		}
 		b, err := json.Marshal(v)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(out, string(b))
+		if _, err := fmt.Fprintln(out, string(b)); err != nil {
+			return err
+		}
 	}
 }
 

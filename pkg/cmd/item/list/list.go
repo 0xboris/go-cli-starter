@@ -3,13 +3,13 @@ package list
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
 
 	"example.com/tool/internal/api"
 	"example.com/tool/internal/tableprinter"
+	"example.com/tool/pkg/cmd/item/shared"
 	"example.com/tool/pkg/cmdutil"
 	"example.com/tool/pkg/iostreams"
 )
@@ -86,7 +86,9 @@ func listRun(opts *ListOptions) error {
 	isTTY := opts.IO.IsStdoutTTY()
 	cs := opts.IO.ColorScheme()
 	if isTTY {
-		fmt.Fprintf(opts.IO.Out, "\nShowing %d %s items\n\n", len(items), opts.State)
+		if _, err := fmt.Fprintf(opts.IO.Out, "\nShowing %d %s items\n\n", len(items), opts.State); err != nil {
+			return err
+		}
 	}
 
 	tp := tableprinter.New(opts.IO, "ID", "Title", "Updated")
@@ -95,9 +97,9 @@ func listRun(opts *ListOptions) error {
 	}
 	for _, it := range items {
 		if isTTY {
-			tp.AddField("#"+strconv.Itoa(it.ID), stateColor(cs, it.State))
+			tp.AddField("#"+it.ID.String(), shared.StateColor(cs, it.State))
 		} else {
-			tp.AddField(strconv.Itoa(it.ID))
+			tp.AddField(it.ID.String())
 		}
 		tp.AddField(it.Title)
 		if !isTTY {
@@ -107,11 +109,4 @@ func listRun(opts *ListOptions) error {
 		tp.EndRow()
 	}
 	return tp.Render()
-}
-
-func stateColor(cs *iostreams.ColorScheme, state string) func(string) string {
-	if state == "closed" {
-		return cs.Red
-	}
-	return cs.Green
 }
