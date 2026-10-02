@@ -95,11 +95,16 @@ go run ./cmd/tool help environment
 
 ## Releasing
 
-Releases are tagged by the `release` workflow, not from a laptop: **Actions → release →
-Run workflow** (from `main`), enter a version such as `v0.4.0` and, optionally, a
-one-line message. It refuses a malformed, existing or older version, runs
-`go mod tidy -diff`, `go vet`, `go test -race` and golangci-lint on `main`, then pushes
-an annotated tag. Users install with `go install example.com/tool/cmd/tool@<version>`.
+Label the pull request: `release:patch`, `release:minor` or `release:major` (the
+labels are created when `.github/workflows/release.yml` lands on main). When the PR
+is merged, the `release` workflow bumps the latest `vX.Y.Z` tag accordingly, runs
+`go mod tidy -diff`, `go vet`, `go test -race` and golangci-lint on the merge commit,
+pushes an annotated tag on it and comments the version on the PR.
+
+The label can go on before or after the merge. Labeling an already-merged PR
+releases its merge commit, unless a newer release already exists. A PR with two
+release labels, or one that is already tagged, is refused or skipped. Users install
+with `go install example.com/tool/cmd/tool@<version>`.
 
 `.goreleaser.yml` is not wired into the workflow yet. Before adding a GoReleaser step,
 add a `LICENSE` file (the archives include it) and set `nfpms.maintainer`, then check
