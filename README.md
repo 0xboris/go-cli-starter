@@ -93,6 +93,23 @@ go run ./cmd/tool item lsit                 # Did you mean this? list
 go run ./cmd/tool help environment
 ```
 
+## Releasing
+
+Label the pull request: `release:patch`, `release:minor` or `release:major` (the
+labels are created when `.github/workflows/release.yml` lands on main). When the PR
+is merged, the `release` workflow bumps the latest `vX.Y.Z` tag accordingly, runs
+`go mod tidy -diff`, `go vet`, `go test -race` and golangci-lint on the merge commit,
+pushes an annotated tag on it and comments the version on the PR.
+
+The label can go on before or after the merge. Labeling an already-merged PR
+releases its merge commit, unless a newer release already exists. A PR with two
+release labels, or one that is already tagged, is refused or skipped. Users install
+with `go install example.com/tool/cmd/tool@<version>`.
+
+`.goreleaser.yml` is not wired into the workflow yet. Before adding a GoReleaser step,
+add a `LICENSE` file (the archives include it) and set `nfpms.maintainer`, then check
+with `goreleaser release --snapshot --clean`.
+
 ## Upgrades when you need them
 
 - Richer terminal support (Windows VT, 256/truecolor, themes, `GH_FORCE_TTY %`): `github.com/cli/go-gh/v2/pkg/term`,

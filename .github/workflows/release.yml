@@ -1,0 +1,152 @@
+# Tag a release by labeling a pull request into main:
+#
+#   release:patch  v1.2.3 -> v1.2.4
+#   release:minor  v1.2.3 -> v1.3.0
+#   release:major  v1.2.3 -> v2.0.0
+#
+# Add the label before or after merging. When the PR is merged and labeled, this
+# workflow checks the merge commit and pushes an annotated tag on it, then comments
+# the tag on the PR. Labeling an already-merged PR tags its merge commit, as long as
+# no newer release exists.
+#
+# pull_request_target runs this file from main, with a write token, so it works for
+# PRs opened before the workflow existed. It must never check out the PR's head:
+# only the merge commit, which is already on main.
+name: release
+
+on:
+  pull_request_target:
+    types: [closed, labeled]
+    branches: [main]
+  push:
+    branches: [main]
+    paths: [.github/workflows/release.yml]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  labels:
+    # Create (or update) the release labels whenever this workflow changes on main.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh label create release:patch --color 0e8a16 --force --description "Tag a patch release when merged (v1.2.3 -> v1.2.4)"
+          gh label create release:minor --color 1d76db --force --description "Tag a minor release when merged (v1.2.3 -> v1.3.0)"
+          gh label create release:major --color b60205 --force --description "Tag a major release when merged (v1.2.3 -> v2.0.0)"
+
+  tag:
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      github.event.pull_request.merged == true &&
+      (
+        (github.event.action == 'labeled' && startsWith(github.event.label.name, 'release:')) ||
+        (github.event.action == 'closed' && (
+          contains(github.event.pull_request.labels.*.name, 'release:patch') ||
+          contains(github.event.pull_request.labels.*.name, 'release:minor') ||
+          contains(github.event.pull_request.labels.*.name, 'release:major')))
+      )
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write      # push the tag
+      pull-requests: write # comment on the PR
+    env:
+      TARGET: ${{ github.event.pull_request.merge_commit_sha }}
+      PR: ${{ github.event.pull_request.number }}
+      LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }} # never the PR head
+          fetch-depth: 0 # all tags and history, for the version checks
+
+      - name: Work out the version
+        id: version
+        run: |
+          set -eu
+          bump=""
+          for l in $LABELS; do
+            case "$l" in
+              release:patch|release:minor|release:major)
+                if [ -n "$bump" ]; then
+                  echo "::error::PR #$PR has more than one release:* label"
+                  exit 1
+                fi
+                bump=${l#release:} ;;
+            esac
+          done
+          if [ -z "$bump" ]; then
+            echo "::error::no release:* label on PR #$PR"
+            exit 1
+          fi
+
+          git merge-base --is-ancestor "$TARGET" origin/main ||
+            { echo "::error::$TARGET is not on main"; exit 1; }
+
+          existing=$(git tag --points-at "$TARGET" --list 'v*')
+          if [ -n "$existing" ]; then
+            echo "::notice::PR #$PR is already released as $existing; nothing to do"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          latest=$(git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true)
+          if [ -z "$latest" ]; then
+            latest=v0.0.0
+          elif ! git merge-base --is-ancestor "$latest" "$TARGET"; then
+            echo "::error::$latest is newer than PR #$PR's merge commit; label a later PR instead"
+            exit 1
+          fi
+          IFS=. read -r major minor patch <<< "${latest#v}"
+          case "$bump" in
+            major) version="v$((major + 1)).0.0" ;;
+            minor) version="v$major.$((minor + 1)).0" ;;
+            patch) version="v$major.$minor.$((patch + 1))" ;;
+          esac
+          echo "Releasing $version ($bump bump from $latest) at $TARGET for PR #$PR"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-go@v5
+        if: steps.version.outputs.skip == 'false'
+        with:
+          go-version-file: go.mod
+
+      - name: Check
+        if: steps.version.outputs.skip == 'false'
+        run: |
+          go mod tidy -diff
+          go vet ./...
+          go test -race ./...
+
+      - uses: golangci/golangci-lint-action@v8
+        if: steps.version.outputs.skip == 'false'
+        with:
+          version: v2.14.0
+
+      - name: Tag
+        if: steps.version.outputs.skip == 'false'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -eu
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$VERSION" "$TARGET" -m "$VERSION: $TITLE (#$PR)"
+          git push origin "refs/tags/$VERSION"
+          gh pr comment "$PR" --body "Released as \`$VERSION\` (\`${TARGET:0:7}\`). Install: \`go install example.com/tool/cmd/tool@$VERSION\`"
+          {
+            echo "### Tagged $VERSION"
+            echo
+            echo "PR #$PR, commit \`$TARGET\`"
+          } >> "$GITHUB_STEP_SUMMARY"
