@@ -124,7 +124,9 @@ jobs:
       - name: Check
         if: steps.version.outputs.skip == 'false'
         run: |
-          go mod tidy -diff
+          # `go mod tidy -diff` needs Go 1.23+; this works on the go.mod version.
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
           go vet ./...
           go test -race ./...
 

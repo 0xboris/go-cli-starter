@@ -16,7 +16,7 @@ test: ## Run all tests (unit + acceptance) with the race detector
 	go test -race ./...
 
 lint: ## Run linters
-	go mod tidy -diff
+	go mod tidy && git diff --exit-code -- go.mod go.sum
 	go vet ./...
 	golangci-lint run
 

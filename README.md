@@ -98,7 +98,7 @@ go run ./cmd/tool help environment
 Label the pull request: `release:patch`, `release:minor` or `release:major` (the
 labels are created when `.github/workflows/release.yml` lands on main). When the PR
 is merged, the `release` workflow bumps the latest `vX.Y.Z` tag accordingly, runs
-`go mod tidy -diff`, `go vet`, `go test -race` and golangci-lint on the merge commit,
+a `go mod tidy` drift check, `go vet`, `go test -race` and golangci-lint on the merge commit,
 pushes an annotated tag on it and comments the version on the PR.
 
 The label can go on before or after the merge. Labeling an already-merged PR
